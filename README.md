@@ -4,7 +4,7 @@ easy-mc-server-mgmt
 Just a collection of scripts to make minecraft server easier to manage.
 
 Includes an install script as well to set up minecraft server quickly for you! :D
-Just run:
+Just clone this repository or download the zip file (and unzip it) and then run:
 
 * install-minecraft-server.sh
 
