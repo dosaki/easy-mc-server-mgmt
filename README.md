@@ -8,6 +8,11 @@ Just clone this repository or download the zip file (and unzip it) and then run:
 
 * install-minecraft-server.sh
 
+At the moment the install script assumes you don't have minecraft installed.
+When I have some extra time I want to make it figure out if it's already installed or not and if it is, adapt the other scripts to take into account the different minecraft location...
+
+- - -
+
 The minecraft-server script has the following options:
 
 * help
