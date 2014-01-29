@@ -1,15 +1,15 @@
 #!/bin/bash
 
+#
 # Author: Tiago 'Dosaki' Correia
 #
-# This script starts minecraft using screen so that server commands
-# can still be issued
+# This script starts minecraft using screen so that you can "daemonize"
+# the process and be able to recapture it and use it's console.
 # This script will live in /usr/bin/
 #
 
 OPTION="$1"
 MESSAGE="$2"
-
 USER="minecraft"
 MC_HOME="/usr/share/minecraft"
 MAX_MEM="640M"
