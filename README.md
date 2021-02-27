@@ -1,46 +1,21 @@
-easy-mc-server-mgmt
+Easy Minecraft Server Management
 ===================
-
-Just a collection of scripts to make minecraft server easier to manage.
-
-Includes an install script as well to set up minecraft server quickly for you! :D
-Just clone this repository or download the zip file (and unzip it) and then run:
-
-* install-minecraft-server.sh
-
-At the moment the install script assumes you don't have minecraft installed.
-When I have some extra time I want to make it figure out if it's already installed or not and if it is, adapt the other scripts to take into account the different minecraft location...
-
-- - -
-
-The minecraft-server script has the following options:
-
-* help
-    * Show help.
-
-* start
-	* Starts the server
-
-* stop
-    * Stops the server
-        * Gives a 10 second warning beforehand
-
-* restart
-    * Issues a stop and a start
-
-* status
-    * Tells you process information
-        * If server is running or not
-        * Minecraft server PID
-        * Screen Session PID
-
-* control
-    * Resumes minecraft server session, allowing you to take control of the server console"
-
-* say
-    * Allows you to say something to the chat as the server
-        * Usage: minecraft-server say 'message'
-
-* command
-    * Allows you to issue commands to the server console
-        * Usage: minecraft-server command 'command'
+```
+Usage:
+    minecraft.sh start [options]
+    minecraft.sh <restart|upgrade> [seconds-until-stop] [options]
+    minecraft.sh <status|attach|help>
+    minecraft.sh <stop|clean-backups> [seconds-until-stop]
+    minecraft.sh log [number-of-lines]
+    minecraft.sh backup [message]
+    minecraft.sh cmd <minecraft command>
+Options:
+    --type=<type>
+        Server type: vanilla or paper. Defaults to 'vanilla'
+    --min-ram=<memory value>
+        Minimum memory for the JVM for the server. Defaults to '2048M'
+    --max-ram=<memory value>
+        Maximum memory for the JVM for the server. Defaults to '6144M'
+    --cpu-count=<number>
+        Amount of CPUs dedicated to this server. Defaults to '3'
+```
