@@ -13,79 +13,106 @@ cd "$DIR"
 
 ACTION="$1"
 shift
-OPTION="$1"
-shift
-
 
 MIN_RAM="2048M"
 MAX_RAM="6144M"
 CPU_COUNT=3
 
+DELAY=30
 SERVER_TYPE="vanilla"
+if [[ -f "${DIR}/last_started_server_type" ]]; then
+  SERVER_TYPE=$(cat "${DIR}/last_started_server_type")
+fi
 
 LOGFILEDIR="$DIR/logs"
 LOGFILE="$LOGFILEDIR/latest.log"
 
-
 function usage {
   echo "Usage:"
-  echo "    $SCRIPT start [options]"
-  echo "    $SCRIPT <restart|upgrade> [seconds-until-stop] [options]"
-  echo "    $SCRIPT <status|attach|help>"
-  echo "    $SCRIPT <stop|clean-backups> [seconds-until-stop]"
+  echo "    $SCRIPT <start|stop|restart|clean-backups|upgrade|status|attach> [options]"
+  echo "    $SCRIPT help"
   echo "    $SCRIPT log [number-of-lines]"
   echo "    $SCRIPT backup [message]"
   echo "    $SCRIPT cmd <minecraft command>"
   echo "Options:"
   echo "    --type=<type>"
-  echo "        Server type: vanilla or paper. Defaults to 'vanilla'"
+  echo "        Server type: vanilla or paper. Defaults to the last started type: '${SERVER_TYPE}'"
   echo "    --min-ram=<memory value>"
   echo "        Minimum memory for the JVM for the server. Defaults to '${MIN_RAM}'"
   echo "    --max-ram=<memory value>"
   echo "        Maximum memory for the JVM for the server. Defaults to '${MAX_RAM}'"
   echo "    --cpu-count=<number>"
   echo "        Amount of CPUs dedicated to this server. Defaults to '${CPU_COUNT}'"
+  echo "    --delay=<seconds>"
+  echo "        Number of seconds to wait until the server stops (useful to warn players). Defaults to '${DELAY}'"
 }
 
-
-for i in "$@"; do
-  case $i in
-  --type=*)
-    SERVER_TYPE="${i#*=}"
-    shift
-    ;;
-  --min-ram=*)
-    MIN_RAM="${i#*=}"
-    shift
-    ;;
-  --max-ram=*)
-    MAX_RAM="${i#*=}"
-    shift
-    ;;
-  --cpu-count=*)
-    CPU_COUNT="${i#*=}"
-    shift
-    ;;
-  *)
-    usage
-    echo "Unknown option ${i}"
-    exit 1
-    ;;
-  esac
-done
-
-if [[ "${SERVER_TYPE}" == "vanilla" ]]; then
-  SERVER_TYPE=""
+if [[ "${ACTION}" == "log" ]] || [[ "${ACTION}" == "backup" ]] || [[ "${ACTION}" == "cmd" ]]; then
+  OPTION="$1"
+  shift
 else
-  SERVER_TYPE=".${SERVER_TYPE}"
+  for i in "$@"; do
+    case $i in
+    --type=*)
+      SERVER_TYPE="${i#*=}"
+      shift
+      ;;
+    --min-ram=*)
+      MIN_RAM="${i#*=}"
+      shift
+      ;;
+    --max-ram=*)
+      MAX_RAM="${i#*=}"
+      shift
+      ;;
+    --cpu-count=*)
+      CPU_COUNT="${i#*=}"
+      shift
+      ;;
+    --delay=*)
+      DELAY="${i#*=}"
+      shift
+      ;;
+    *)
+      usage
+      echo "Unknown option ${i}"
+      exit 1
+      ;;
+    esac
+  done
 fi
-SERVER_JAR="server${SERVER_TYPE}.jar"
+
+echo "${SERVER_TYPE}" > "${DIR}/last_started_server_type"
+
+FILE_SUFFIX=""
+if [[ "${SERVER_TYPE}" != "vanilla" ]]; then
+  FILE_SUFFIX=".${SERVER_TYPE}"
+fi
+SERVER_JAR="server${FILE_SUFFIX}.jar"
 
 mkdir -p "$LOGFILEDIR"
 touch "$LOGFILE"
 
 SCREEN_PID=`screen -list | grep Detached | awk '{ print $1 }' | tr '.' ' ' | awk '{ print $1 }'`
 PID=`ps aux | grep minecraft | grep java | grep -v "SCREEN" | awk '{ print $2 }'`
+
+function wait_until_log_is_written_to {
+  LIMIT="$1"
+  num=0
+  while true; do
+    if [[ ${num} -gt ${LIMIT} ]]; then
+      return 1
+    fi
+    #check if it's been there in the past
+    recent_modified_files=$(find ./logs/ -newer ./now)
+    if [ "$recent_modified_files" != "" ]; then
+      return 0
+    fi
+    num=$((num + 1))
+    sleep 1
+  done
+  return 1
+}
 
 function wait_for {
   LINE="$1"
@@ -106,21 +133,41 @@ function wait_for {
   return 1
 }
 
-function backup_world {
+function backup_world_dimension {
   MESSAGE="$1"
-  cd $DIR/world
+  DIMENSION="$2"
+  if [[ "${DIMENSION}" != "" ]]; then
+    DIMENSION="_${DIMENSION}"
+  fi
+  cd "${DIR}/world${DIMENSION}"
   git add .
   git commit -am "${MESSAGE}"
 }
+function backup_world {
+  MESSAGE="$1"
+  backup_world_dimension "${MESSAGE}"
+  backup_world_dimension "${MESSAGE}" "nether"
+  backup_world_dimension "${MESSAGE}" "the_end"
+}
 
-function cleanup_backups {
+function cleanup_backups_dimension {
+  DIMENSION="$1"
+  if [[ "${DIMENSION}" != "" ]]; then
+    DIMENSION="_${DIMENSION}"
+  fi
   cd "${DIR}"
-  git clone file://${DIR}/world prunedWorld --depth=60
-  cd ./prunedWorld
+  git clone "file://${DIR}/world${DIMENSION}" "prunedWorld${DIMENSION}" --depth=60
+  cd ./prunedWorld${DIMENSION}
   git remote rm origin
   cd "${DIR}"
   rm -rf world
-  mv prunedWorld world
+  mv "prunedWorld${DIMENSION}" world
+}
+
+function cleanup_backups {
+  cleanup_backups_dimension
+  cleanup_backups_dimension "nether"
+  cleanup_backups_dimension "the_end"
 }
 
 function send_command {
@@ -137,7 +184,7 @@ function status {
     if [ "$RCON_LINE" == "" ] && [ "$FIRST_LINE" == "" ] || [ "$RCON_LINE" != "" ]; then
       send_command "list"
       sleep 2
-      PLAYERS=`tail -1 logs/latest.log | head -1 | awk '{ print $6 }'`
+      PLAYERS=`tail -1 ${LOGFILE} | head -1 | awk '{ print $6 }'`
     fi
   fi
 
@@ -155,16 +202,23 @@ function status {
     echo "| MINECRAFT INFO"
     echo "|   Players: $PLAYERS"
   else
-    echo "   Status: Stopped"
+    echo "|   Status: Stopped"
   fi
   echo "+----"
 }
 
 function start {
   if [ "$SCREEN_PID" == "" ]; then
+    touch "${DIR}/now"
+    echo "Starting using $DIR/$SERVER_JAR"
     screen -d -m java -Xms$MIN_RAM -Xmx$MAX_RAM -XX:+UseConcMarkSweepGC -XX:+CMSIncrementalPacing -XX:ParallelGCThreads=$CPU_COUNT -XX:+AggressiveOpts -jar $DIR/$SERVER_JAR nogui
+    wait_until_log_is_written_to 10
+    SCREEN_PID=`screen -list | grep Detached | awk '{ print $1 }' | tr '.' ' ' | awk '{ print $1 }'`
+    PID=`ps aux | grep minecraft | grep java | grep -v "SCREEN" | awk '{ print $2 }'`
     wait_for "Starting minecraft server" 10
     wait_for "Done" 10
+    status
+    rm "${DIR}/now"
   else
     echo "Already running!"
     status
@@ -322,23 +376,14 @@ if [ "$ACTION" == "backup" ]; then
   fi
   backup_world "${OPTION}"
 elif [ "$ACTION" == "clean-backups" ]; then
-  if [ "$OPTION" == "" ]; then
-    OPTION=30
-  fi
-  stop "restart" $OPTION
+  stop "restart" ${DELAY}
   start
 elif [ "$ACTION" == "start" ]; then
   start
 elif [ "$ACTION" == "stop" ]; then
-  if [ "$OPTION" == "" ]; then
-    OPTION=30
-  fi
-  stop "stop" $OPTION
+  stop "stop" ${DELAY}
 elif [ "$ACTION" == "restart" ]; then
-  if [ "$OPTION" == "" ]; then
-    OPTION=30
-  fi
-  stop "restart" $OPTION
+  stop "restart" ${DELAY}
   start
 elif [ "$ACTION" == "status" ]; then
   status
@@ -349,10 +394,7 @@ elif [ "$ACTION" == "log" ]; then
 elif [ "$ACTION" == "cmd" ]; then
   send_command "$OPTION"
 elif [ "$ACTION" == "upgrade" ]; then
-  if [ "$OPTION" == "" ]; then
-    OPTION=30
-  fi
-  upgrade ${OPTION}
+  upgrade ${DELAY}
 else
   usage
   exit 1
